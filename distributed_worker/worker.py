@@ -3,7 +3,7 @@ import multiprocessing
 
 def run_worker(worker):
   while not worker._done:
-    worker._run_loop()
+    worker.run_once()
 
 def create_worker(pipe, wclass, *args, **kwargs):
   worker = wclass(pipe, *args, **kwargs)
@@ -25,7 +25,7 @@ class DistributedWorker:
     self._done = False
     self.pipe.send(':register')
   
-  def _run_loop(self):
+  def run_once(self):
     self.loop()
 
     if self.pipe.poll():

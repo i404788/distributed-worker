@@ -37,6 +37,9 @@ class DistributedManager:
         self.last_message_time[i] = time.time()
         self.pipes.recv()
 
+  def _is_active(self, worker: int):
+    return self.last_message_time.get(i, 0) + self.ttl > time.time()
+
   def get_active_workers(self):
     ret = []
     for i, pipe in enumerate(self.pipes):
@@ -89,20 +92,35 @@ class DistributedManager:
     return ret
 
   # Spreads {workderidx: [msg, ...] ...}
-  def spread(self, obj: Mapping[int, List[Any]]):
+  def spread(self, obj: Mapping[int, List[Any]]) -> Mapping[int, bool]:
+    ret = {}
+
+    if max(obj.keys()) > len(self.pipes):
+      raise ValueError('Invalid worker idx %d' % max(obj.keys()))
+
     for k in obj:
-      if int(k) > len(self.pipes):
-        raise ValueError('Invalid worker idx')
-
       for msg in obj[k]:
-        self.pipes[int(k)].send(msg)
+        ret[k] = self.send(k, msg)
 
-  def send(self, worker: int, msg: Any):
-    self.pipes[worker].send(msg)
+    return ret
 
-  def broadcast(self, obj: Any):
-    for pipe in self.pipes:
-      pipe.send(obj)
+  def send(self, worker: int, msg: Any) -> bool:
+    try:
+      self.pipes[worker].send(msg)
+      return True
+    except BrokenPipeError:
+      wasActive = self._is_active(worker)
+      if wasActive:
+        self.on_new_worker(worker)
+      self.last_message_time[worker] = -1
+      return False
+    
+
+  def broadcast(self, obj: Any) -> List[bool]:
+    ret = []
+    for pipe in range(len(self.pipes)):
+      ret.append(self.send(pipe, obj))
+    return ret
   
   # fn = def func(pipe, *args, **kwargs)
   # Create local worker
@@ -112,6 +130,7 @@ class DistributedManager:
     proc = multiprocessing.Process(target=create_worker, args=(theirs, wclass, *args,), kwargs=kwargs)
     self.local_processes.append(proc)
     proc.start()
+    self.on_new_worker(len(self.pipes)-1)
 
   # Can be used as multiprocessing.Client(*args)
   def get_client_args(self):
@@ -127,3 +146,34 @@ class DistributedManager:
       except ValueError as e:
         proc.kill()
         print('Failed to stop local worker %d (PID %d)' % (i, proc.pid))
+
+  def run_once(self):
+    self.poll()
+    self.loop()
+
+    # Add new workers
+    while self.try_accept():
+      self.on_new_worker(len(self.pipes)-1)
+
+    # Handle messages
+    msgs = self.collect()
+    for worker in msgs:
+      for msg in msgs[worker]:
+        self.handle_msg(worker, msg)
+
+  # User implemented
+  def loop(self):
+    pass
+
+  # User implemented
+  def on_new_worker(self, worker: int):
+    pass
+
+  # User implemented
+  def on_worker_disconnect(self, worker: int):
+    pass
+
+  # User implemented
+  def handle_msg(self, worker: int, msg: Any):
+    pass
+

@@ -1,52 +1,94 @@
+from typing import Tuple, Mapping, List, Any
 from distributed_worker import DistributedManager
 
-def prime_server(manager):
-  # Tasks left
-  pending = list(range(100000))
-  chunks = 1000
-  # Resulting map
-  results = {}
-  # Workers that are busy
-  tasked = set()
+# def prime_server(manager):
+#   # Tasks left
+#   pending = list(range(150000))
+#   chunks = 1000
+#   # Resulting map
+#   results = {}
+#   # Workers that are busy
+#   tasked = set()
 
-  while len(pending) or tasked:
-    if manager.try_accept():
-      print('New worker added')
+#   while len(pending) or tasked:
+#     if manager.try_accept():
+#       print('New worker added')
 
-    # Run general manager tasks
-    manager.poll()
+#     # Run general manager tasks
+#     manager.poll()
 
-    # Get list of all active workers (dynamically added)
-    active = set(manager.get_active_workers())
+#     # Get list of all active workers (dynamically added)
+#     active = set(manager.get_active_workers())
 
-    # Get messages from workers
-    msgs = manager.collect()
+#     # Get messages from workers
+#     msgs = manager.collect()
 
-    # Check all workers/messages
-    for worker in msgs:
-      for msg in msgs[worker]:
-        # Expect result to be {number: isPrimeBool, ...}
-        if type(msg) == dict: # to be safe
-          print('Got results from worker %d' % worker)
-          for num in msg:
-            results[num] = msg[num]
+#     # Check all workers/messages
+#     for worker in msgs:
+#       for msg in msgs[worker]:
+#         # Expect result to be {number: isPrimeBool, ...}
+#         if type(msg) == dict: # to be safe
+#           print('Got results from worker %d' % worker)
+#           for num in msg:
+#             results[num] = msg[num]
           
-          # Mark worker as available for work
-          tasked.remove(worker)
+#           # Mark worker as available for work
+#           tasked.remove(worker)
 
-    available_workers = active - tasked
+#     available_workers = active - tasked
+#     for x in available_workers:
+#       if not len(pending):
+#         continue
+#       chunk = min(len(pending), chunks)
+#       # Send chunks (1000) numbers for processing
+#       task = pending[:chunk]
+#       pending = pending[chunk:]
+#       print('Send task %d-%d to worker %d' % (task[0], task[-1], x))
+#       manager.send(x, task)
+#       tasked.add(x)
+
+#   return results
+
+
+class PrimeManager(DistributedManager):
+  def __init__(self):
+    super().__init__()
+    self.pending = list(range(150000))
+    self.results = {}
+    self.tasked = set()
+    self.chunks = 1000 # Task size
+
+  def loop(self):
+    # No tasks pending, wait on exit
+    if len(self.pending) < 1:
+        return
+
+    # Assign tasks to workers
+    active = set(self.get_active_workers())
+    available_workers = active - self.tasked
     for x in available_workers:
-      if not len(pending):
-        continue
-      chunk = min(len(pending), chunks)
-      # Send chunks (1000) numbers for processing
-      task = pending[:chunk]
-      pending = pending[chunk:]
+      chunk = min(len(self.pending), self.chunks)
+      # Send chunks (1000) of numbers for processing
+      task = self.pending[:chunk]
+      self.pending = self.pending[chunk:]
       print('Send task %d-%d to worker %d' % (task[0], task[-1], x))
-      manager.send(x, task)
-      tasked.add(x)
+      self.send(x, task)
+      self.tasked.add(x)
 
-  return results
+  # User implemented
+  def on_new_worker(self, worker: int):
+    print('New worker added %d' % worker)
+
+  # User implemented
+  def on_worker_disconnect(self, worker: int):
+    print('Worker disconnected %d' % worker)
+
+  # User implemented
+  def handle_msg(self, worker: int, msg: Any):
+    # Worker finished it's task
+    for num in msg:
+      self.results[num] = msg[num]
+    self.tasked.remove(worker)
 
 
 from distributed_worker import DistributedWorker
@@ -86,7 +128,7 @@ class PrimeWorker(DistributedWorker):
 
 
 if __name__ == "__main__":
-    manager = DistributedManager()
+    manager = PrimeManager()
 
     for x in range(5):
       manager.create_local_worker(PrimeWorker)
@@ -94,11 +136,13 @@ if __name__ == "__main__":
     # For adding remote workers
     print('client creds:', manager.get_client_args())
 
-    results = prime_server(manager)
+    while manager.tasked or manager.pending:
+      manager.run_once()
+      # Can do other tasks here as well
 
     # Print the results
-    # for x in results:
-    #   if results[x]:
-    #     print(x)
+    for x in manager.results:
+      if manager.results[x]:
+        print(x)
 
     manager.stop()

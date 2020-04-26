@@ -13,6 +13,7 @@ Then you implement one or multiple `DistributedWorker`s to handle those tasks.
 
 And now you can run your distributed computations.
 
+
 ## Example Setup
 > Check `/example.py` for a fully functional version
 
@@ -33,51 +34,61 @@ First we will create a task server:
 
 ```py
 from distributed_worker import DistributedManager
-def prime_server():
-  manager = DistributedManager()
+class PrimeManager(DistributedManager):
+  def __init__(self):
+    super().__init__()
+    self.pending = list(range(150000))
+    self.results = {}
+    self.tasked = set()
+    self.chunks = 1000 # Task size
 
-  # Credentials/Endpoint for the workers to use
-  print(manager.get_client_args())
+  def loop(self):
+    # No tasks pending, wait on exit
+    if len(self.pending) < 1:
+        return
 
-  # Tasks left
-  pending = list(range(100000))
-  # Resulting map
-  results = {}
-  # Workers that are busy
-  tasked = set()
-
-  while len(pending):
-    if manager.try_accept():
-      print('New worker added')
-
-    # Run general manager tasks
-    manager.poll()
-
-    # Get list of all active workers (dynamically added)
-    active = set(manager.get_active_workers())
-
-    # Get messages from workers
-    msgs = manager.collect()
-
-    # Check all workers/messages
-    for worker in msgs:
-      for msg in msgs[worker]:
-        # Expect result to be {number: isPrimeBool, ...}
-        if type(msg) == dict: # to be safe
-          for num in msg:
-            results[num] = msg[num]
-          
-          # Mark worker as available for work
-          tasked.remove(worker)
-
-    available_workers = active - tasked
+    # Assign tasks to workers
+    active = set(self.get_active_workers())
+    available_workers = active - self.tasked
     for x in available_workers:
-      # Send 100 numbers for processing
-      task = pending[:100]
-      manager.send(x, task)
-      tasked.add(x)
+      chunk = min(len(self.pending), self.chunks)
+      # Send chunks (1000) of numbers for processing
+      task = self.pending[:chunk]
+      self.pending = self.pending[chunk:]
+      print('Send task %d-%d to worker %d' % (task[0], task[-1], x))
+      self.send(x, task)
+      self.tasked.add(x)
 
-  return results
+  # User implemented
+  def on_new_worker(self, worker: int):
+    print('New worker added %d' % worker)
+
+  # User implemented
+  def on_worker_disconnect(self, worker: int):
+    print('Worker disconnected %d' % worker)
+
+  # User implemented
+  def handle_msg(self, worker: int, msg: Any):
+    # Worker finished it's task
+    for num in msg:
+      self.results[num] = msg[num]
+    self.tasked.remove(worker)
+
+if __name__ == "__main__":
+    manager = PrimeManager()
+
+    # For adding remote workers
+    print('client creds:', manager.get_client_args())
+
+    while manager.tasked or manager.pending:
+      manager.run_once()
+      # Can do other tasks here as well
+
+    # Print the results
+    print(manager.results)
+
+    # Stop all workers
+    manager.stop()
 ```
 
 Then we'll create a worker:
@@ -129,4 +140,19 @@ If we just want to utilize our local CPU cores (and not deal with the authentica
 manager = DistributedManager()
 # Again, add PrimeWorker constructor args if needed
 manager.create_local_worker(PrimeWorker)
+```
+> The total execution time will generally improve as tasks need more time to complete
+
+Running `example.py` vs a single-threaded version:
+```
+$ time example.py
+...
+real    0m11.631s
+user    0m57.648s
+sys     0m0.395s
+
+$ time single.py
+real    0m43.581s
+user    0m43.550s
+sys     0m0.018s
 ```
