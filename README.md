@@ -14,17 +14,20 @@ Then you implement one or multiple `DistributedWorker`s to handle those tasks.
 And now you can run your distributed computations.
 
 ## Example Setup
+> Check `/example.py` for a fully functional version
+
 Let's say we want a distributed prime checker, here is a very naive implementation:
 ```py
 def is_prime(x):
-  x = float(x)
-  for num in range(x):
-    if x/num != int(x/num):
+  for num in range(2, x):
+    if (x % num) == 0:
       return False
   return True
 ```
 
 If we want to check a large amount of primes that would take ages, so we want to distribute the task.
+
+> To be clear this task is likely overkill for a distributed setup, but it's a good example
 
 First we will create a task server:
 
@@ -47,7 +50,10 @@ def prime_server():
     if manager.try_accept():
       print('New worker added')
 
-    # Get list of all active workers (dynamic entry)
+    # Run general manager tasks
+    manager.poll()
+
+    # Get list of all active workers (dynamically added)
     active = set(manager.get_active_workers())
 
     # Get messages from workers
@@ -70,6 +76,8 @@ def prime_server():
       task = pending[:100]
       manager.send(x, task)
       tasked.add(x)
+
+  return results
 ```
 
 Then we'll create a worker:
@@ -84,7 +92,7 @@ class PrimeWorker(DistributedWorker):
 
   # Calculations here
   def loop(self):
-    # Ideally keep calculations within 1 hour or adjust TTL on the server
+    # Ideally keep the executing here within 1 hour or adjust TTL on the server
     if len(self.task):
       # Tasks available
       ctask = self.task.pop()
@@ -93,6 +101,8 @@ class PrimeWorker(DistributedWorker):
       # Finished tasks
       if len(self.results):
         self.send(self.results)
+        # Clear results so we don't resend
+        self.results = {}
   
   # Messages here
   def handle_msg(self, msg):

@@ -1,3 +1,4 @@
+from typing import Tuple, Mapping, List, Any
 import multiprocessing
 from multiprocessing.connection import Listener, Client, Pipe
 import select
@@ -9,7 +10,7 @@ from .worker import create_worker
 default_address = ('localhost', 6000)
 
 class DistributedManager:
-  def __init__(self, address=None, authkey=b'secret password', ttl=3600.):
+  def __init__(self, address:Tuple[str, int]=None, authkey:str=b'secret password', ttl:float=3600.):
     self.address = address or default_address
     self.authkey = authkey
     self.ttl = ttl
@@ -17,6 +18,7 @@ class DistributedManager:
     self.pipes = []
     self.local_processes = []
     self.last_message_time = {}
+    self.last_ping = time.time()
 
   """
   Warning not portable (use Python ~3.7 from anaconda which uses cpython)
@@ -32,14 +34,14 @@ class DistributedManager:
   def flush(self):
     for i, pipe in enumerate(self.pipes):
       while pipe.poll():
-        self.last_message_time[i] = time.gmtime()
+        self.last_message_time[i] = time.time()
         self.pipes.recv()
 
   def get_active_workers(self):
     ret = []
     for i, pipe in enumerate(self.pipes):
       last_msg = self.last_message_time.get(i, 0)
-      if last_msg + ttl > time.gmtime():
+      if last_msg + self.ttl > time.time():
         ret.append(i)
 
     return ret
@@ -56,10 +58,14 @@ class DistributedManager:
     ret = []
     for i, pipe in enumerate(self.pipes):
       last_msg = self.last_message_time.get(i, 0)
-      if last_msg + ttl < time.gmtime():
+      if last_msg + self.ttl < time.time():
         ret.append(i)
-
     return ret
+
+  def poll(self):
+    # Ping every 1/2 TTL
+    if self.last_ping + (self.ttl / 2)  < time.time():
+      self.fping()
 
   # broadcast('ping') + Flush
   def fping(self):
@@ -69,12 +75,12 @@ class DistributedManager:
     return ready
 
   # Collects {workeridx: [msg, ...], ...}
-  def collect(self):
+  def collect(self) -> Mapping[int, List[Any]]:
     ret = {}
     for i, pipe in enumerate(self.pipes):
       while pipe.poll():
         ret.setdefault(i, [])
-        self.last_message_time[i] = time.gmtime()
+        self.last_message_time[i] = time.time()
         recv = pipe.recv()
         if recv == ':pong' or recv == ':register':
           continue
@@ -83,7 +89,7 @@ class DistributedManager:
     return ret
 
   # Spreads {workderidx: [msg, ...] ...}
-  def spread(self, obj):
+  def spread(self, obj: Mapping[int, List[Any]]):
     for k in obj:
       if int(k) > len(self.pipes):
         raise ValueError('Invalid worker idx')
@@ -91,10 +97,10 @@ class DistributedManager:
       for msg in obj[k]:
         self.pipes[int(k)].send(msg)
 
-  def send(self, worker, msg):
+  def send(self, worker: int, msg: Any):
     self.pipes[worker].send(msg)
 
-  def broadcast(self, obj):
+  def broadcast(self, obj: Any):
     for pipe in self.pipes:
       pipe.send(obj)
   
@@ -112,11 +118,12 @@ class DistributedManager:
     return (self.address, 'AF_INET', self.authkey)
 
   def stop(self):
-    self.broadcast('stop')
+    self.broadcast(':stop')
     print('Stopping all workers...')
     for i, proc in enumerate(self.local_processes):
       proc.join(10.)
       try:
         proc.close()
       except ValueError as e:
+        proc.kill()
         print('Failed to stop local worker %d (PID %d)' % (i, proc.pid))
