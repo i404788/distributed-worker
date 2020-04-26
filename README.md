@@ -3,7 +3,7 @@ A Python 3.7 wrapper around multiprocessing for easy cross-machine computation
 
 ## What is this?
 Distributed Worker is a wrapper around the multiprocessing package allowing you to focus on the distributed computations instead of managing nodes/communication.
-You can use regular python primitive to communicate just as in multiprocessing, but you can also use remote machines as workers.
+You can use regular python primitives to communicate just as in multiprocessing, but you can also use remote machines as workers.
 
 ## How does it work?
 You create a `DistributedManager` which creates a central server for your workers to connect to.
@@ -59,15 +59,12 @@ class PrimeManager(DistributedManager):
       self.send(x, task)
       self.tasked.add(x)
 
-  # User implemented
   def on_new_worker(self, worker: int):
     print('New worker added %d' % worker)
 
-  # User implemented
   def on_worker_disconnect(self, worker: int):
     print('Worker disconnected %d' % worker)
 
-  # User implemented
   def handle_msg(self, worker: int, msg: Any):
     # Worker finished it's task
     for num in msg:
@@ -101,7 +98,6 @@ class PrimeWorker(DistributedWorker):
     self.task = []
     self.results = {}
 
-  # Calculations here
   def loop(self):
     # Ideally keep the executing here within 1 hour or adjust TTL on the server
     if len(self.task):
@@ -115,7 +111,6 @@ class PrimeWorker(DistributedWorker):
         # Clear results so we don't resend
         self.results = {}
   
-  # Messages here
   def handle_msg(self, msg):
     if type(msg) == list:
       self.task = msg
