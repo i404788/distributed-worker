@@ -35,7 +35,7 @@ class DistributedManager:
     for i, pipe in enumerate(self.pipes):
       while pipe.poll():
         self.last_message_time[i] = time.time()
-        self.pipes.recv()
+        pipe.recv()
 
   def _is_active(self, worker: int):
     return self.last_message_time.get(i, 0) + self.ttl > time.time()

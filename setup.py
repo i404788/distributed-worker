@@ -13,7 +13,7 @@ setuptools.setup(
     url='https://github.com/i404788/distributed-worker',
     license='BSD 2-Clause "Simplified" License',
     long_description=io.open('README.md', encoding='utf-8').read(),
-    packages=['distributed_worker', 'distributed_worker.bin', 'distributed_worker.ext'],
+    packages=['distributed_worker'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
