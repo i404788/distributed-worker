@@ -32,13 +32,20 @@ class DistributedManager:
     return False
 
   def flush(self):
-    for i, pipe in enumerate(self.pipes):
-      while pipe.poll():
-        self.last_message_time[i] = time.time()
-        pipe.recv()
+    for i, pipe in self.get_active_pipes():
+      try:
+        while pipe.poll():
+          self.last_message_time[i] = time.time()
+          pipe.recv()
+      except EOFError:
+        self._on_error(i)
+        
 
   def _is_active(self, worker: int):
-    return self.last_message_time.get(i, 0) + self.ttl > time.time()
+    return self.last_message_time.get(worker, 0) + self.ttl > time.time()
+
+  def get_active_pipes(self):
+    return [(x, self.pipes[x]) for x in self.get_active_workers()]
 
   def get_active_workers(self):
     ret = []
@@ -81,13 +88,18 @@ class DistributedManager:
   def collect(self) -> Mapping[int, List[Any]]:
     ret = {}
     for i, pipe in enumerate(self.pipes):
-      while pipe.poll():
-        ret.setdefault(i, [])
-        self.last_message_time[i] = time.time()
-        recv = pipe.recv()
-        if recv == ':pong' or recv == ':register':
-          continue
-        ret[i].append(recv)
+      try:
+        while pipe.poll():
+          recv = pipe.recv()
+          ret.setdefault(i, [])
+          self.last_message_time[i] = time.time()
+          if recv == ':pong' or recv == ':register':
+            continue
+          ret[i].append(recv)
+      except EOFError:
+        # If previously active emit error
+        if self._is_active(i):
+          self._on_error(i)
     
     return ret
 
@@ -104,15 +116,19 @@ class DistributedManager:
 
     return ret
 
+  def _on_error(self, worker: int):
+      wasActive = self._is_active(worker)
+      if wasActive:
+        self.on_worker_disconnect(worker)
+      self.last_message_time[worker] = -1
+      return False
+
   def send(self, worker: int, msg: Any) -> bool:
     try:
       self.pipes[worker].send(msg)
       return True
     except BrokenPipeError:
-      wasActive = self._is_active(worker)
-      if wasActive:
-        self.on_new_worker(worker)
-      self.last_message_time[worker] = -1
+      self._on_error(worker)
       return False
     
 
