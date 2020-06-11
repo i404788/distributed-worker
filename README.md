@@ -139,7 +139,7 @@ manager.create_local_worker(PrimeWorker)
 > The total execution time will generally improve as tasks need more time to complete
 
 Running `example.py` vs a single-threaded version:
-```
+```sh
 $ time example.py
 ...
 real    0m11.631s
