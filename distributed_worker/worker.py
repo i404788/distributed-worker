@@ -28,7 +28,7 @@ class DistributedWorker:
   def run_once(self):
     self.loop()
 
-    if self.pipe.poll():
+    if self.pipe.poll(.1):
       msg = self.pipe.recv()
 
       if msg == ':stop':

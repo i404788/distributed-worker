@@ -75,14 +75,8 @@ class DistributedManager:
   def poll(self):
     # Ping every 1/2 TTL
     if self.last_ping + (self.ttl / 2)  < time.time():
-      self.fping()
-
-  # broadcast('ping') + Flush
-  def fping(self):
-    self.broadcast(':ping')
-    ready = multiprocessing.connection.wait(self.pipes, timeout=.5)
-    self.flush() # Clear all messages (and update last msg time)
-    return ready
+      self.broadcast(':ping')
+      self.last_ping = time.time()  
 
   # Collects {workeridx: [msg, ...], ...}
   def collect(self) -> Mapping[int, List[Any]]:
@@ -98,8 +92,7 @@ class DistributedManager:
           ret[i].append(recv)
       except EOFError:
         # If previously active emit error
-        if self._is_active(i):
-          self._on_error(i)
+        self._on_error(i)
     
     return ret
 
