@@ -155,6 +155,7 @@ class DistributedManager:
       except ValueError as e:
         proc.kill()
         print('Failed to stop local worker %d (PID %d)' % (i, proc.pid))
+    self.listener.close()
 
   def run_once(self):
     self.poll()
