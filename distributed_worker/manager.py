@@ -7,14 +7,25 @@ import time
 from .worker import create_worker
 
 
-default_address = ('localhost', 6000)
+default_address = 'localhost'
+default_port = 6000
 
 class DistributedManager:
-  def __init__(self, address:Tuple[str, int]=None, authkey:str=b'secret password', ttl:float=3600.):
+  def __init__(self, address: str = None, authkey:str=b'secret password', ttl:float=3600.):
     self.address = address or default_address
     self.authkey = authkey
     self.ttl = ttl
-    self.listener = Listener(self.address, authkey=self.authkey, backlog=16)
+   
+    self.listener = None
+    self.port = default_port
+    while self.port < 6100: # Allow 100 retries
+        try:
+            self.listener = Listener((self.address, self.port,), authkey=self.authkey, backlog=16)
+        except OSError:
+            self.port += 1
+            continue
+        break
+
     self.pipes = []
     self.local_processes = []
     self.last_message_time = {}
@@ -143,7 +154,7 @@ class DistributedManager:
 
   # Can be used as multiprocessing.Client(*args)
   def get_client_args(self):
-    return (self.address, 'AF_INET', self.authkey)
+    return ((self.address, self.port), 'AF_INET', self.authkey)
 
   def stop(self):
     self.broadcast(':stop')
