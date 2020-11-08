@@ -14,7 +14,10 @@ def create_remote_worker_sync(wclass, client_args: Tuple[Tuple[str, int], str, B
   create_worker(pipe, wclass, *args, **kwargs)
 
 def create_remote_worker(wclass, client_args: Tuple[Tuple[str, int], str, ByteString], *args, **kwargs):
-  spawnf = kwargs.get('spawnf', multiprocessing.Process)
+  spawnf = multiprocessing.Process
+  if 'spawnf' in kwargs:
+      spawnf = kwargs['spawnf']
+      del kwargs['spawnf']
   proc = spawnf(target=create_remote_worker_sync, args=(wclass,client_args, *args), kwargs=kwargs)
   proc.start()
   return proc
