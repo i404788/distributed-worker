@@ -147,7 +147,9 @@ class DistributedManager:
   def create_local_worker(self, wclass, *args, **kwargs):
     ours, theirs = Pipe()
     self.pipes.append(ours)
-    proc = multiprocessing.Process(target=create_worker, args=(theirs, wclass, *args,), kwargs=kwargs)
+    spawnf = kwargs.get('spawnf', multiprocessing.Process)
+
+    proc = spawnf(target=create_worker, args=(theirs, wclass, *args,), kwargs=kwargs)
     self.local_processes.append(proc)
     proc.start()
     self.on_new_worker(len(self.pipes)-1)
