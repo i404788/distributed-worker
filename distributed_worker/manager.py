@@ -48,7 +48,7 @@ class DistributedManager:
         while pipe.poll():
           self.last_message_time[i] = time.time()
           pipe.recv()
-      except EOFError:
+      except (EOFError, ConnectionResetError):
         self._on_error(i)
         
 
@@ -101,7 +101,7 @@ class DistributedManager:
           if recv == ':pong' or recv == ':register':
             continue
           ret[i].append(recv)
-      except EOFError:
+      except (EOFError, ConnectionResetError):
         # If previously active emit error
         self._on_error(i)
     
