@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     name='distributed-worker',
-    version='1.3.2',
+    version='1.3.3',
     description=(
         'A Python wrapper around multiprocessing for easy cross-machine computation '
     ),
