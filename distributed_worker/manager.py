@@ -35,11 +35,14 @@ class DistributedManager:
   Warning not portable (use Python ~3.7 from anaconda which uses cpython)
   """
   def try_accept(self):
-    readable, writable, errored = select.select([self.listener._listener._socket], [], [], .1)
-    for s in readable:
-      if s is self.listener._listener._socket:
-        self.pipes.append(self.listener.accept())
-        return True
+    try:
+      readable, writable, errored = select.select([self.listener._listener._socket], [], [], .1)
+      for s in readable:
+        if s is self.listener._listener._socket:
+          self.pipes.append(self.listener.accept())
+          return True
+    except:
+      return False
     return False
 
   def flush(self):
