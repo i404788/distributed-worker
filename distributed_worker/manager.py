@@ -41,7 +41,7 @@ class DistributedManager:
         if s is self.listener._listener._socket:
           self.pipes.append(self.listener.accept())
           return True
-    except:
+    except (ConnectionResetError, EOFError, OSError, BrokenPipeError):
       return False
     return False
 
