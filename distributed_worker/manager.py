@@ -196,7 +196,7 @@ class DistributedManager:
                 self.handle_msg(worker, msg)
 
         # Delay up until poll_delay is reached (if needed)
-        time.sleep(max(stime - time.time() + self.poll_delay), 0)
+        time.sleep(max(stime - time.time() + self.poll_delay, 0))
 
     # User implemented
     def loop(self):

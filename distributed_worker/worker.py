@@ -1,5 +1,6 @@
 from typing import Tuple, Any, ByteString
 import multiprocessing
+import time
 
 def run_worker(worker):
   while not worker._done:
@@ -45,7 +46,7 @@ class DistributedWorker:
         self.handle_msg(msg)
 
     # Delay up until poll_delay is reached (if needed)
-    time.sleep(max(stime - time.time() + self.poll_delay), 0)
+    time.sleep(max(stime - time.time() + self.poll_delay, 0))
 
   def send(self, msg: Any):
     self.pipe.send(msg)
