@@ -11,10 +11,11 @@ default_address = 'localhost'
 default_port = 6000
 
 class DistributedManager:
-  def __init__(self, address: str = None, authkey:str=b'secret password', ttl:float=3600.):
+    def __init__(self, address: str = None, authkey:str=b'secret password', ttl:float=3600., poll_delay:float=0.1):
     self.address = address or default_address
     self.authkey = authkey
     self.ttl = ttl
+    self.poll_delay = poll_delay
    
     self.listener = None
     self.port = default_port
@@ -178,6 +179,7 @@ class DistributedManager:
     self.listener.close()
 
   def run_once(self):
+    stime = time.time()
     self.poll()
     self.loop()
 
@@ -190,6 +192,9 @@ class DistributedManager:
     for worker in msgs:
       for msg in msgs[worker]:
         self.handle_msg(worker, msg)
+
+    # Delay up until poll_delay is reached (if needed)
+    time.sleep(max(stime - time.time() + self.poll_delay), 0)
 
   # User implemented
   def loop(self):

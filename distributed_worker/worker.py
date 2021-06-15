@@ -28,8 +28,10 @@ class DistributedWorker:
     self.pipe = pipe
     self._done = False
     self.pipe.send(':register')
+    self.poll_delay = 0.1
   
   def run_once(self):
+    stime = time.time()
     self.loop()
 
     if self.pipe.poll(.1):
@@ -41,6 +43,9 @@ class DistributedWorker:
         self.pipe.send(':pong')
       else:
         self.handle_msg(msg)
+
+    # Delay up until poll_delay is reached (if needed)
+    time.sleep(max(stime - time.time() + self.poll_delay), 0)
 
   def send(self, msg: Any):
     self.pipe.send(msg)
